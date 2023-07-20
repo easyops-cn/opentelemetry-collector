@@ -136,6 +136,7 @@ func zSpanToInternal(zspan *zipkinmodel.SpanModel, tags map[string]string, dest 
 	dest.SetStartTime(pdata.TimestampFromTime(zspan.Timestamp))
 	dest.SetEndTime(pdata.TimestampFromTime(zspan.Timestamp.Add(zspan.Duration)))
 	dest.SetKind(zipkinKindToSpanKind(zspan.Kind, tags))
+	extractProtoStatus(zspan).CopyTo(dest.Status())
 
 	populateSpanStatus(tags, dest.Status())
 	if err := zTagsToSpanLinks(tags, dest.Links()); err != nil {
@@ -427,4 +428,32 @@ func extractInstrumentationLibrary(zspan *zipkinmodel.SpanModel) string {
 		return ""
 	}
 	return zspan.Tags[conventions.InstrumentationLibraryName]
+}
+
+// ============================================= //
+// https://github.com/open-telemetry/opentelemetry-collector/tree/v0.23.0
+// 以下代码是在 open-telemetry/opentelemetry-collector:0.23.0 上添加
+
+const statusCodeUnknown = 2
+
+func extractProtoStatus(zs *zipkinmodel.SpanModel) pdata.SpanStatus {
+	// The status is stored with the "error" key
+	// See https://github.com/census-instrumentation/opencensus-go/blob/1eb9a13c7dd02141e065a665f6bf5c99a090a16a/exporter/zipkin/zipkin.go#L160-L165
+	if zs == nil || len(zs.Tags) == 0 {
+		return pdata.NewSpanStatus()
+	}
+	canonicalCodeStr := zs.Tags["error"]
+	message := zs.Tags["opencensus.status_description"]
+	if message == "" && canonicalCodeStr == "" {
+		return pdata.NewSpanStatus()
+	}
+	code, set := canonicalCodesMap[canonicalCodeStr]
+	if !set {
+		// If not status code was set, then we should use UNKNOWN
+		code = statusCodeUnknown
+	}
+	pss := pdata.NewSpanStatus()
+	pss.SetCode(pdata.StatusCode(code))
+	pss.SetMessage(message)
+	return pss
 }
