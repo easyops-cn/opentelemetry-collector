@@ -50,6 +50,15 @@ func WithAddTracesMarshallers(encodingMarshaller map[string]TracesMarshaller) Fa
 	}
 }
 
+// WithAddLogsMarshallers adds logsMarshallers.
+func WithAddLogsMarshallers(encodingMarshaller map[string]LogsMarshaller) FactoryOption {
+	return func(factory *kafkaExporterFactory) {
+		for encoding, marshaller := range encodingMarshaller {
+			factory.logsMarshalers[encoding] = marshaller
+		}
+	}
+}
+
 // NewFactory creates Kafka exporter factory.
 func NewFactory(options ...FactoryOption) component.ExporterFactory {
 	f := &kafkaExporterFactory{
